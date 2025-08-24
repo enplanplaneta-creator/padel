@@ -1,1 +1,549 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Campeonato de Pádel · 16 parejas · Cuadro + Reservas</title>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#111827; --muted:#334155; --text:#e5e7eb; --accent:#22c55e; --accent-2:#14b8a6; --bad:#ef4444; --warn:#f59e0b; --ok:#10b981; --card:#1f2937; --line:#374151;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background:radial-gradient(1200px 600px at 20% -10%, #1b2541 0%, #0b1022 40%, var(--bg) 100%); color:var(--text)}
+  header{padding:16px 20px;border-bottom:1px solid #1e293b; position:sticky; top:0; backdrop-filter:saturate(120%) blur(6px); background:rgba(10,14,28,.6)}
+  h1{margin:.2rem 0; font-size:clamp(1.2rem,2.5vw,1.8rem)}
+  .wrap{display:grid; gap:18px; grid-template-columns: 1.4fr .9fr; padding:18px; align-items:start}
+  @media (max-width:1100px){ .wrap{grid-template-columns:1fr;}}
+
+  /* Bracket */
+  .bracket{display:grid; grid-template-columns: repeat(4, minmax(180px,1fr)); gap:18px; overflow:auto; padding-bottom:8px}
+  .round{display:flex; flex-direction:column; gap:14px}
+  .round h3{margin:0 0 6px; font-weight:600; color:#cbd5e1}
+  .match{background:linear-gradient(180deg, #1c2434, #141b29); border:1px solid var(--line); border-radius:16px; padding:10px; position:relative}
+  .match .slot{display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:10px; border:1px dashed #334155; margin:6px 0}
+  .seed{display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:22px; border-radius:6px; background:#0b1220; border:1px solid #2a3448; font-size:12px; color:#9fb0d1}
+  .team{flex:1; display:flex; align-items:center; gap:8px}
+  .team[contenteditable="true"]{outline:2px dashed #1e3a8a}
+  .vs{position:absolute; right:10px; top:10px; font-size:12px; color:#93c5fd; opacity:.9}
+  .scheduled{margin-top:8px; font-size:.85rem; color:#c7f9e5}
+  .unscheduled{margin-top:8px; font-size:.85rem; color:#fca5a5}
+
+  /* Panel lateral */
+  .panel{background:linear-gradient(180deg,#0f1527,#0b1120); border:1px solid var(--line); border-radius:16px; padding:16px; position:sticky; top:72px}
+  .panel h2{margin:.2rem 0 8px; font-size:1.1rem}
+  label{display:block; font-size:.9rem; color:#cbd5e1; margin:10px 0 4px}
+  select, input[type="text"], input[type="password"]{width:100%; padding:10px 12px; border-radius:12px; border:1px solid #2b364c; background:#0b1220; color:#e2e8f0}
+  .row{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+  button{cursor:pointer; padding:10px 14px; border-radius:12px; border:1px solid #1f2937; background:linear-gradient(180deg,#1a2d1f,#122517); color:#ecfdf5; font-weight:600; transition:.2s}
+  button:hover{transform:translateY(-1px); box-shadow:0 8px 18px rgba(0,0,0,.25)}
+  button.secondary{background:linear-gradient(180deg,#252b3a,#1a2030)}
+  .msg{margin-top:8px; min-height:22px; font-size:.9rem}
+  .msg.ok{color:#a7f3d0}
+  .msg.err{color:#fecaca}
+
+  /* Tabla disponibilidad */
+  .grid{margin-top:14px; border:1px solid var(--line); border-radius:12px; overflow:hidden}
+  table{width:100%; border-collapse:collapse; font-size:.9rem}
+  th, td{border-bottom:1px solid #233047; padding:8px 10px; text-align:left}
+  th{background:#0d1428; color:#cbd5e1}
+  .tag{display:inline-flex; align-items:center; gap:6px; padding:2px 8px; border-radius:999px; font-size:.8rem; border:1px solid #2a374d}
+  .tag.free{color:#bbf7d0; border-color:#1f4f2f; background:rgba(16,185,129,.08)}
+  .tag.busy{color:#fecaca; border-color:#4b1f24; background:rgba(239,68,68,.08)}
+
+  footer{padding:24px 18px; color:#93a4c8; font-size:.85rem}
+  code{background:#0b1220; border:1px solid #253756; padding:2px 6px; border-radius:6px}
+
+  /* Responsive helpers */
+  @media (max-width:700px){
+    .bracket{grid-template-columns:repeat(2, minmax(160px,1fr))}
+    .round h3{font-size:1rem}
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Campeonato de Pádel · 16 parejas — Cuadro y Reserva de Pistas</h1>
+    <div style="display:flex; gap:12px; align-items:center; font-size:.92rem; color:#93a4c8; flex-wrap:wrap">
+      <span>Dos pistas disponibles. Elige partido, hora de comienzo (intervalos de 30 min) y pista. Duración por defecto: 90 min. Las horas ocupadas desaparecen de las opciones.</span>
+      <span id="adminBadge" style="padding:2px 8px; border:1px solid #34425e; border-radius:999px; background:#0b1220; color:#cbd5e1">Modo: usuario</span>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <!-- BRACKET -->
+    <section>
+      <div class="bracket" id="bracket"></div>
+    </section>
+
+    <!-- PANEL LATERAL: RESERVAS -->
+    <aside class="panel">
+      <h2>Reservar pista para un partido</h2>
+      <label for="matchSel">Partido</label>
+      <select id="matchSel"></select>
+
+      <div class="row">
+        <div>
+          <label for="courtSel">Pista</label>
+          <select id="courtSel">
+            <option value="Pista 1">Pista 1</option>
+            <option value="Pista 2">Pista 2</option>
+          </select>
+        </div>
+        <div>
+          <label for="slotSel">Hora de comienzo</label>
+          <select id="slotSel"></select>
+        </div>
+      </div>
+
+      <button id="reserveBtn">Reservar (90 min)</button>
+      <div class="msg" id="msg"></div>
+
+      <h2 style="margin-top:18px">Disponibilidad</h2>
+      <div class="grid">
+        <table id="grid">
+          <thead>
+            <tr><th>Franja</th><th>Pista 1</th><th>Pista 2</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <details style="margin-top:14px">
+        <summary style="cursor:pointer">Administración</summary>
+        <div style="margin-top:8px">
+          <label for="adminPin">PIN admin</label>
+          <div class="row">
+            <input id="adminPin" type="password" placeholder="••••" />
+            <button class="secondary" id="adminBtn">Entrar</button>
+          </div>
+          <label for="cancelMatchSel" style="margin-top:10px">Cancelar/editar reserva de</label>
+          <select id="cancelMatchSel"></select>
+          <div class="row" style="margin-top:8px">
+            <button class="secondary" id="cancelBtn">Cancelar reserva</button>
+            <button class="secondary" id="logoutBtn">Salir admin</button>
+          </div>
+          <div style="margin-top:8px; font-size:.85rem; color:#9fb0d1">Los nombres de parejas y la modificación de reservas <b>solo</b> están disponibles en modo admin. Cambia el PIN en el código (<code>ADMIN_PIN</code>).</div>
+        </div>
+      </details>
+
+      <details style="margin-top:14px">
+        <summary style="cursor:pointer">Conexión (Firebase opcional)</summary>
+        <div style="margin-top:8px; font-size:.9rem; color:#9fb0d1">
+          Funciona <b>sin servidor</b> (bloqueo local por navegador). Para bloqueo real entre dispositivos, rellena tu <code>firebaseConfig</code> y pon <code>USE_FIREBASE = true</code>.
+        </div>
+      </details>
+    </aside>
+  </div>
+
+  <footer>
+    <div>Consejo: en móvil, gira el dispositivo si quieres ver más columnas del cuadro. El sistema oculta automáticamente las horas ocupadas en el selector.</div>
+  </footer>
+
+  <!-- Firebase (opcional) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+
+  <script>
+  /*********************************
+   * CONFIGURACIÓN
+   *********************************/
+  const USE_FIREBASE = false; // <-- CAMBIA A true si rellenas firebaseConfig
+  const firebaseConfig = { apiKey:"TU_API_KEY", authDomain:"TU_DOMINIO.firebaseapp.com", projectId:"TU_PROJECT_ID", storageBucket:"TU_BUCKET.appspot.com", messagingSenderId:"TU_SENDER_ID", appId:"TU_APP_ID" };
+
+  const ADMIN_PIN = '2468'; // cámbialo
+  const DEFAULT_DURATION_MIN = 90; // duración fija por defecto
+
+  // Nombres ficticios (16 parejas)
+  const TEAMS = [
+    'Lobos Verdes (Álvaro / Marta)',
+    'Tormenta Azul (Diego / Paula)',
+    'EcoRally (Sergio / Irene)',
+    'Aces del Norte (Luis / Noa)',
+    'Brisa Atlántica (Hugo / Laura)',
+    'Raqueta Salvaje (Javier / Alba)',
+    'Granito & Musgo (Iván / Vega)',
+    'Cantábricos (Pablo / Ana)',
+    'Velocidad Marina (Rubén / Carmen)',
+    'Valle Esmeralda (Óscar / Lucía)',
+    'Trébol & Punto (Rafa / Sofía)',
+    'Olas y Voleas (Marcos / Julia)',
+    'Bosque en Juego (Xabier / Elena)',
+    'NorteMagnus (Gonzalo / Leire)',
+    'Pico & Drop (Tomás / Nerea)',
+    'Faro de Medianoche (Adrián / Clara)'
+  ];
+
+  // Genera franjas: próximos 12 días, de 09:00 a 22:00 cada 30 min
+  function generateTimeSlots(days=12){
+    const slots=[]; const now=new Date();
+    for(let d=0; d<days; d++){
+      const day = new Date(now.getFullYear(), now.getMonth(), now.getDate()+d);
+      for(let h=9; h<=21; h++){
+        for(let m=0; m<60; m+=30){
+          const dt = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, m, 0);
+          slots.push(dt.toISOString());
+        }
+      }
+    }
+    return slots;
+  }
+  const TIME_SLOTS = generateTimeSlots(12);
+
+  // Estructura de partidos (16 parejas, cuadro fijo)
+  const MATCHES = [
+    { id:'R16-M1', round:'Octavos', a:TEAMS[0],  b:TEAMS[1] },
+    { id:'R16-M2', round:'Octavos', a:TEAMS[2],  b:TEAMS[3] },
+    { id:'R16-M3', round:'Octavos', a:TEAMS[4],  b:TEAMS[5] },
+    { id:'R16-M4', round:'Octavos', a:TEAMS[6],  b:TEAMS[7] },
+    { id:'R16-M5', round:'Octavos', a:TEAMS[8],  b:TEAMS[9] },
+    { id:'R16-M6', round:'Octavos', a:TEAMS[10], b:TEAMS[11] },
+    { id:'R16-M7', round:'Octavos', a:TEAMS[12], b:TEAMS[13] },
+    { id:'R16-M8', round:'Octavos', a:TEAMS[14], b:TEAMS[15] },
+    { id:'QF-M1',  round:'Cuartos', a:'Gan. R16-M1', b:'Gan. R16-M2' },
+    { id:'QF-M2',  round:'Cuartos', a:'Gan. R16-M3', b:'Gan. R16-M4' },
+    { id:'QF-M3',  round:'Cuartos', a:'Gan. R16-M5', b:'Gan. R16-M6' },
+    { id:'QF-M4',  round:'Cuartos', a:'Gan. R16-M7', b:'Gan. R16-M8' },
+    { id:'SF-M1',  round:'Semifinal', a:'Gan. QF-M1', b:'Gan. QF-M2' },
+    { id:'SF-M2',  round:'Semifinal', a:'Gan. QF-M3', b:'Gan. QF-M4' },
+    { id:'F-M1',   round:'Final', a:'Gan. SF-M1', b:'Gan. SF-M2' },
+  ];
+
+  // Estado
+  const state = {
+    matches: {},         // id -> {a,b, scheduled?: {slotISO, court, dur}}
+    reservations: {},    // key (court@slotISO) -> {matchId}
+    isAdmin:false
+  };
+
+  // Helpers
+  function formatSlot(iso){
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, {weekday:'short', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+  }
+  function slotKey(court, iso){ return `${court}@@${iso}` }
+
+  // Persistencia local
+  const LS_KEYS = { matches:'padel_matches_v2', reservations:'padel_reservas_v2', isAdmin:'padel_admin_v2' };
+  function loadLocal(){
+    try{
+      const m = JSON.parse(localStorage.getItem(LS_KEYS.matches)||'{}');
+      const r = JSON.parse(localStorage.getItem(LS_KEYS.reservations)||'{}');
+      const a = JSON.parse(localStorage.getItem(LS_KEYS.isAdmin)||'false');
+      Object.assign(state.matches, m);
+      Object.assign(state.reservations, r);
+      state.isAdmin = !!a;
+    }catch(e){ console.warn(e) }
+  }
+  function saveLocal(){
+    localStorage.setItem(LS_KEYS.matches, JSON.stringify(state.matches));
+    localStorage.setItem(LS_KEYS.reservations, JSON.stringify(state.reservations));
+    localStorage.setItem(LS_KEYS.isAdmin, JSON.stringify(state.isAdmin));
+  }
+
+  // Firebase (opcional)
+  let app, db, auth;
+  async function initFirebase(){
+    if(!USE_FIREBASE) return;
+    app = firebase.initializeApp(firebaseConfig);
+    auth = firebase.auth();
+    await auth.signInAnonymously().catch(console.error);
+    db = firebase.firestore();
+
+    db.collection('reservations').onSnapshot((snap)=>{
+      state.reservations = {};
+      snap.forEach(doc=>{ state.reservations[doc.id] = doc.data(); });
+      renderGrid();
+      renderMatchesScheduledBadges();
+      refreshSlotOptions();
+    });
+    db.collection('matches').onSnapshot((snap)=>{
+      snap.forEach(doc=>{ state.matches[doc.id] = doc.data(); });
+      renderBracket();
+      refreshSelectors();
+    });
+  }
+
+  async function reserveOnServer(matchId, court, slotISO, dur){
+    const key = slotKey(court, slotISO);
+    const resRef = db.collection('reservations').doc(key);
+    const matchRef = db.collection('matches').doc(matchId);
+    return db.runTransaction(async (tx)=>{
+      const resDoc = await tx.get(resRef);
+      if(resDoc.exists) throw new Error('ESE HUECO YA FUE RESERVADO');
+      tx.set(resRef, { matchId, court, slotISO, dur, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+      const mDoc = await tx.get(matchRef);
+      const base = mDoc.exists ? mDoc.data() : {};
+      tx.set(matchRef, { ...base, a: base.a||getMatch(matchId).a, b: base.b||getMatch(matchId).b, scheduled:{ court, slotISO, dur } }, { merge:true });
+    });
+  }
+  async function cancelOnServer(matchId){
+    const q = await db.collection('reservations').where('matchId','==', matchId).get();
+    const batch = db.batch();
+    q.forEach(doc=> batch.delete(doc.ref));
+    const matchRef = db.collection('matches').doc(matchId);
+    batch.set(matchRef, { scheduled: firebase.firestore.FieldValue.delete() }, { merge:true });
+    return batch.commit();
+  }
+
+  // Bracket
+  function getMatch(id){ return MATCHES.find(m=>m.id===id) }
+
+  function renderBracket(){
+    const container = document.getElementById('bracket');
+    container.innerHTML = '';
+
+    const columns = [
+      MATCHES.filter(m=>m.round==='Octavos'),
+      MATCHES.filter(m=>m.round==='Cuartos'),
+      MATCHES.filter(m=>m.round==='Semifinal'),
+      MATCHES.filter(m=>m.round==='Final'),
+    ];
+
+    const roundTitles = ['Octavos','Cuartos','Semifinal','Final'];
+
+    columns.forEach((roundMatches, idx)=>{
+      const col = document.createElement('div');
+      col.className = 'round';
+      const h = document.createElement('h3');
+      h.textContent = roundTitles[idx];
+      col.appendChild(h);
+
+      roundMatches.forEach((m, i)=>{
+        const matchState = state.matches[m.id] || { a:m.a, b:m.b };
+        const box = document.createElement('div');
+        box.className = 'match';
+        box.dataset.mid = m.id;
+        const vs = document.createElement('div'); vs.className='vs'; vs.textContent = m.id; box.appendChild(vs);
+
+        const slotA = document.createElement('div'); slotA.className='slot';
+        const sdA = document.createElement('span'); sdA.className='seed'; sdA.textContent = (idx===0? (i*2+1): '•');
+        const teamA = document.createElement('div'); teamA.className='team'; teamA.textContent = matchState.a || m.a; teamA.contentEditable = state.isAdmin;
+        slotA.append(sdA, teamA);
+
+        const slotB = document.createElement('div'); slotB.className='slot';
+        const sdB = document.createElement('span'); sdB.className='seed'; sdB.textContent = (idx===0? (i*2+2): '•');
+        const teamB = document.createElement('div'); teamB.className='team'; teamB.textContent = matchState.b || m.b; teamB.contentEditable = state.isAdmin;
+        slotB.append(sdB, teamB);
+
+        const sched = document.createElement('div');
+        const s = (state.matches[m.id]||{}).scheduled;
+        if(s){
+          sched.className='scheduled';
+          sched.textContent = `Reservado: ${formatSlot(s.slotISO)} · ${s.court} · ${s.dur} min`;
+        }else{
+          sched.className='unscheduled';
+          sched.textContent = `Sin reserva`;
+        }
+
+        box.append(slotA, slotB, sched);
+        col.appendChild(box);
+
+        // Persistir cambios de nombre (solo admin)
+        function saveNames(){
+          if(!state.isAdmin) return;
+          state.matches[m.id] = { ...(state.matches[m.id]||{}), a:teamA.textContent.trim(), b:teamB.textContent.trim() };
+          if(USE_FIREBASE){ db.collection('matches').doc(m.id).set(state.matches[m.id], { merge:true }); }
+          else { saveLocal(); }
+          refreshSelectors();
+        }
+        teamA.addEventListener('blur', saveNames);
+        teamB.addEventListener('blur', saveNames);
+      });
+
+      container.appendChild(col);
+    });
+  }
+
+  function renderMatchesScheduledBadges(){
+    document.querySelectorAll('.match').forEach(box=>{
+      const id = box.dataset.mid;
+      const schedEl = box.querySelector('.scheduled, .unscheduled');
+      const m = state.matches[id];
+      if(m && m.scheduled){
+        schedEl.className = 'scheduled';
+        schedEl.textContent = `Reservado: ${formatSlot(m.scheduled.slotISO)} · ${m.scheduled.court} · ${m.scheduled.dur} min`;
+      }else{
+        schedEl.className = 'unscheduled';
+        schedEl.textContent = 'Sin reserva';
+      }
+    });
+  }
+
+  // Selectores y tabla
+  function refreshSelectors(){
+    const ms = document.getElementById('matchSel');
+    const ms2 = document.getElementById('cancelMatchSel');
+    const all = MATCHES.map(m=>{
+      const st = state.matches[m.id]||{};
+      const label = `${m.id} — ${st.a||m.a} vs ${st.b||m.b}`;
+      return { id:m.id, label };
+    });
+    ms.innerHTML = all.map(o=>`<option value="${o.id}">${o.label}</option>`).join('');
+    ms2.innerHTML = `<option value="">Selecciona…</option>` + all
+      .filter(o=> (state.matches[o.id]||{}).scheduled )
+      .map(o=>`<option value="${o.id}">${o.label}</option>`).join('');
+    refreshSlotOptions();
+  }
+
+  function refreshSlotOptions(){
+    const court = document.getElementById('courtSel').value;
+    const sel = document.getElementById('slotSel');
+    // mostrar solo horas libres para la pista elegida
+    const options = TIME_SLOTS.filter(iso=> !state.reservations[slotKey(court, iso)] )
+      .map(iso=> `<option value="${iso}">${formatSlot(iso)}</option>`).join('');
+    sel.innerHTML = options || '<option value="">(Sin horas libres)</option>';
+  }
+
+  function renderGrid(){
+    const tbody = document.querySelector('#grid tbody');
+    tbody.innerHTML = '';
+    TIME_SLOTS.forEach(iso=>{
+      const tr = document.createElement('tr');
+      const c1 = state.reservations[slotKey('Pista 1', iso)];
+      const c2 = state.reservations[slotKey('Pista 2', iso)];
+
+      const td0 = document.createElement('td'); td0.textContent = formatSlot(iso);
+      const td1 = document.createElement('td');
+      const td2 = document.createElement('td');
+
+      function cell(tag, res){
+        const span = document.createElement('span'); span.className = 'tag ' + (res? 'busy':'free');
+        if(res){
+          const m = state.matches[res.matchId] || getMatch(res.matchId) || {}; 
+          const a = (m.a||'').slice(0,18), b=(m.b||'').slice(0,18);
+          span.textContent = `${m.id||res.matchId} · ${a} vs ${b}`;
+        }else{
+          span.textContent = 'Libre';
+        }
+        tag.appendChild(span);
+      }
+
+      cell(td1, c1); cell(td2, c2);
+      tr.append(td0, td1, td2);
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Acciones de reserva/cancelación
+  async function reservar(){
+    const matchId = document.getElementById('matchSel').value;
+    const slotISO = document.getElementById('slotSel').value;
+    const court = document.getElementById('courtSel').value;
+    const dur = DEFAULT_DURATION_MIN;
+    const m = document.getElementById('msg');
+    m.textContent = '';
+
+    try{
+      if(!slotISO){ throw new Error('No hay horas libres en esa pista.'); }
+      if(USE_FIREBASE){
+        await reserveOnServer(matchId, court, slotISO, dur);
+      } else {
+        const key = slotKey(court, slotISO);
+        if(state.reservations[key]) throw new Error('Ese hueco ya está reservado');
+        state.reservations[key] = { matchId, court, slotISO, dur, createdAt: Date.now() };
+        state.matches[matchId] = { ...(state.matches[matchId]||{}), a:(state.matches[matchId]?.a)||getMatch(matchId).a, b:(state.matches[matchId]?.b)||getMatch(matchId).b, scheduled:{ court, slotISO, dur } };
+        saveLocal();
+      }
+      renderGrid();
+      renderMatchesScheduledBadges();
+      refreshSelectors();
+      m.className = 'msg ok';
+      m.textContent = 'Reserva confirmada (90 min).';
+    }catch(err){
+      m.className = 'msg err';
+      m.textContent = err.message || 'No se pudo reservar';
+    }
+  }
+
+  async function cancelar(){
+    const matchId = document.getElementById('cancelMatchSel').value;
+    const m = document.getElementById('msg');
+    if(!state.isAdmin){ m.className='msg err'; m.textContent='Solo admin puede cancelar.'; return; }
+    if(!matchId){ m.className='msg err'; m.textContent='Selecciona un partido.'; return; }
+
+    try{
+      if(USE_FIREBASE){
+        await cancelOnServer(matchId);
+      } else {
+        const sched = (state.matches[matchId]||{}).scheduled;
+        if(sched){ delete state.reservations[slotKey(sched.court, sched.slotISO)]; }
+        if(state.matches[matchId]) delete state.matches[matchId].scheduled;
+        saveLocal();
+      }
+      renderGrid();
+      renderMatchesScheduledBadges();
+      refreshSelectors();
+      m.className = 'msg ok'; m.textContent = 'Reserva cancelada.';
+    }catch(err){
+      m.className = 'msg err'; m.textContent = err.message || 'No se pudo cancelar';
+    }
+  }
+
+  // Admin: entrar/salir
+  function adminEnter(){
+    const pinInput = document.getElementById('adminPin');
+    const pin = (pinInput.value || '').trim();
+    const m = document.getElementById('msg');
+    if(!pin){ m.className='msg err'; m.textContent='Introduce el PIN.'; return; }
+    if(pin === ADMIN_PIN){
+      state.isAdmin = true; saveLocal();
+      renderBracket();
+      renderAdminBadge();
+      m.className='msg ok'; m.textContent='Modo admin activado.';
+    }else{ m.className='msg err'; m.textContent='PIN incorrecto.'; }
+  }
+  function adminExit(){
+    state.isAdmin = false; saveLocal();
+    renderBracket();
+    renderAdminBadge();
+    const m = document.getElementById('msg'); m.className='msg'; m.textContent='';
+  }(){
+    state.isAdmin = false; saveLocal();
+    renderBracket();
+    const m = document.getElementById('msg'); m.className='msg'; m.textContent='';
+  }
+
+  // Inicio
+  function renderAdminBadge(){
+    const b = document.getElementById('adminBadge');
+    if(!b) return;
+    if(state.isAdmin){
+      b.textContent = 'Modo: admin';
+      b.style.borderColor = '#1f4f2f';
+      b.style.color = '#bbf7d0';
+      b.style.background = 'rgba(16,185,129,.08)';
+    } else {
+      b.textContent = 'Modo: usuario';
+      b.style.borderColor = '#34425e';
+      b.style.color = '#cbd5e1';
+      b.style.background = '#0b1220';
+    }
+  }
+
+  function init(){
+    loadLocal();
+    MATCHES.forEach(m=>{ if(!state.matches[m.id]) state.matches[m.id] = { a:m.a, b:m.b }; });
+    renderBracket();
+    refreshSelectors();
+    renderGrid();
+    renderAdminBadge();
+
+    document.getElementById('reserveBtn').addEventListener('click', reservar);
+    document.getElementById('cancelBtn').addEventListener('click', cancelar);
+    document.getElementById('adminBtn').addEventListener('click', adminEnter);
+    document.getElementById('logoutBtn').addEventListener('click', adminExit);
+    document.getElementById('courtSel').addEventListener('change', refreshSlotOptions);
+
+    // Permitir pulsar Enter en el campo PIN para entrar
+    const pinInput = document.getElementById('adminPin');
+    pinInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ adminEnter(); }});
+
+    initFirebase();
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
 
